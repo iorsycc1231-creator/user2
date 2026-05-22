@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Receipt Scan - 経費精算</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Noto Sans JP',sans-serif;background:#f5f3ee;min-height:100vh}
+    header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#fffdf8;border-bottom:2px solid #1c1917;position:sticky;top:0;z-index:10}
+    .brand{display:flex;align-items:center;gap:12px}
+    .brand-mark{width:38px;height:38px;background:#1c1917;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;border-radius:4px}
+    .brand-name{font-size:17px;font-weight:700}
+    .brand-sub{font-size:11px;color:#78716c}
+    #csv-btn{background:#16a34a;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;display:none}
+    .inner{max-width:960px;margin:0 auto;padding:20px 16px 60px}
+    .key-box{background:#fffdf8;border:1px solid #e7e5e0;border-radius:12px;padding:16px 18px;margin-bottom:16px}
+    .key-label{font-size:13px;font-weight:700;color:#57534e;margin-bottom:10px}
+    .key-row{display:flex;gap:8px;margin-bottom:8px}
+    .key-row input{flex:1;background:#f5f3ee;border:1px solid #d6d3d1;border-radius:8px;padding:10px 12px;font-size:14px;font-family:monospace;outline:none}
+    .key-row button{background:none;border:1px solid #d6d3d1;border-radius:8px;padding:0 14px;cursor:pointer;font-size:16px}
+    .key-hint{font-size:11px;color:#a8a29e;line-height:1.6}
+    .key-hint a{color:#16a34a}
+    .dropzone{background:#fffdf8;border:2px dashed #d6d3d1;border-radius:12px;padding:40px 20px;text-align:center;cursor:pointer;margin-bottom:16px;transition:all .2s}
+    .dropzone:hover{border-color:#16a34a;background:#f0fdf4}
+    .drop-emoji{font-size:40px;margin-bottom:10px}
+    .drop-title{font-size:16px;font-weight:700;margin-bottom:6px}
+    .drop-sub{font-size:13px;color:#78716c}
+    .stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+    .chip{border:1px solid #d6d3d1;border-radius:20px;padding:4px 12px;font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+    .card{background:#fffdf8;border:1px solid #e7e5e0;border-radius:12px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+    .card-img{position:relative;height:180px;background:#e8e5de;overflow:hidden}
+    .card-img img{width:100%;height:100%;object-fit:cover}
+    .remove-btn{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:13px}
+    .overlay{position:absolute;inset:0;background:rgba(245,243,238,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+    .spinner{width:32px;height:32px;border:3px solid #e7e5e0;border-top:3px solid #16a34a;border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .status-tag{position:absolute;bottom:8px;left:8px;color:#fff;font-size:11px;padding:3px 10px;border-radius:4px;font-weight:700}
+    .card-body{padding:14px 16px 16px}
+    .data-row{display:flex;justify-content:space-between;padding:4px 0;gap:8px}
+    .data-row .l{font-size:12px;color:#78716c;flex-shrink:0}
+    .data-row .v{font-size:13px;text-align:right;word-break:break-all}
+    .data-row .bold{font-size:15px;font-weight:800;color:#16a34a}
+    hr{border:none;border-top:1px solid #e7e5e0;margin:8px 0}
+    .item-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;gap:6px}
+    .item-name{font-size:12px;color:#78716c;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tax-tag{font-size:10px;background:#f0fdf4;color:#16a34a;border:1px solid #bbf7d0;border-radius:4px;padding:1px 6px;flex-shrink:0}
+    .item-amt{font-size:13px;flex-shrink:0}
+    .err-box{background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px}
+    .err-title{color:#dc2626;font-weight:700;font-size:13px;margin-bottom:6px}
+    .err-toggle{background:none;border:none;color:#dc2626;cursor:pointer;font-size:12px;padding:0;margin-bottom:4px;display:block}
+    .err-pre{font-size:11px;color:#b91c1c;white-space:pre-wrap;word-break:break-all;background:rgba(0,0,0,.04);padding:10px;border-radius:6px;max-height:160px;overflow-y:auto;display:none;margin-top:6px}
+    .notes{font-size:11px;color:#a8a29e;margin-top:8px;font-style:italic}
+  </style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="brand-mark">R</div>
+    <div>
+      <div class="brand-name">Receipt Scan</div>
+      <div class="brand-sub">Claude AI · 経費精算CSV</div>
+    </div>
+  </div>
+  <button id="csv-btn" onclick="downloadCSV()">⬇ CSV出力</button>
+</header>
+
+<div class="inner">
+  <div class="key-box">
+    <div class="key-label">🔑 Claude APIキー</div>
+    <div class="key-row">
+      <input type="password" id="api-key" placeholder="sk-ant-... で始まるキーを入力" oninput="saveKey(this.value)"/>
+      <button onclick="toggleKey()">👁</button>
+    </div>
+    <div class="key-hint">
+      キーはこのデバイスにのみ保存されます。取得先:
+      <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
+    </div>
+  </div>
+
+  <div class="dropzone" id="dropzone"
+    onclick="document.getElementById('file-input').click()"
+    ondragover="event.preventDefault();this.style.borderColor='#16a34a';this.style.background='#f0fdf4'"
+    ondragleave="this.style.borderColor='#d6d3d1';this.style.background='#fffdf8'"
+    ondrop="event.preventDefault();this.style.borderColor='#d6d3d1';this.style.background='#fffdf8';handleFiles(event.dataTransfer.files)">
+    <input type="file" id="file-input" accept="image/*" multiple style="display:none" onchange="handleFiles(this.files)"/>
+    <div class="drop-emoji">📷</div>
+    <div class="drop-title">レシートをドロップ・タップして選択</div>
+    <div class="drop-sub">JPG · PNG · HEIC · 複数枚同時OK</div>
+  </div>
+
+  <div class="stats" id="stats" style="display:none"></div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+const PROMPT = `このレシート・領収書の画像を解析してください。
+以下のJSON形式のみで返してください。説明文・コードブロックは不要です。JSONのみ。
+
+{
+  "store_name": "店名（不明なら空文字）",
+  "invoice_number": "インボイス登録番号（T始まり13桁、なければ空文字）",
+  "date": "日付（YYYY-MM-DD形式、不明なら空文字）",
+  "items": [
+    {
+      "name": "商品名",
+      "amount": 金額の数値,
+      "tax_category": "10%標準" または "8%軽減" または "非課税" または "不明"
+    }
+  ],
+  "subtotal": 小計の数値またはnull,
+  "tax_8": 消費税8%の数値またはnull,
+  "tax_10": 消費税10%の数値またはnull,
+  "total": 合計金額の数値またはnull,
+  "notes": "特記事項"
+}`;
+
+let receipts = [];
+
+window.onload = () => {
+  const k = localStorage.getItem('claude_key') || '';
+  document.getElementById('api-key').value = k;
+};
+
+function saveKey(v) { localStorage.setItem('claude_key', v); }
+function toggleKey() {
+  const el = document.getElementById('api-key');
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+function handleFiles(files) {
+  [...files].forEach(processFile);
+}
+
+async function processFile(file) {
+  if (!file.type.startsWith('image/')) return;
+  const id = Date.now() + Math.random();
+  const preview = URL.createObjectURL(file);
+  const receipt = { id, preview, status: 'loading', data: null, error: null };
+  receipts.push(receipt);
+  renderCard(receipt);
+  updateStats();
+
+  try {
+    const apiKey = document.getElementById('api-key').value.trim();
+    if (!apiKey) throw new Error('APIキーが入力されていません');
+    const b64 = await toBase64(file);
+    const data = await callClaude(apiKey, b64, file.type);
+    receipt.status = 'done';
+    receipt.data = data;
+  } catch(e) {
+    receipt.status = 'error';
+    receipt.error = e.message;
+  }
+  renderCard(receipt);
+  updateStats();
+}
+
+function toBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('ファイル読み込み失敗'));
+    r.readAsDataURL(file);
+  });
+}
+
+async function callClaude(apiKey, b64, mimeType) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1024,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType, data: b64 } },
+          { type: 'text', text: PROMPT }
+        ]
+      }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`Claude APIエラー: ${err?.error?.message || res.status}`);
+  }
+
+  const data = await res.json();
+  const raw = data?.content?.[0]?.text || '';
+  return parseJson(raw);
+}
+
+function parseJson(raw) {
+  if (!raw) throw new Error('AIからの応答が空でした');
+  let text = raw.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
+  const s = text.indexOf('{'), e = text.lastIndexOf('}');
+  if (s === -1 || e === -1) throw new Error('JSONが見つかりません\n' + text.slice(0,200));
+  try { return JSON.parse(text.slice(s, e+1)); }
+  catch(err) { throw new Error('JSONパースエラー: ' + err.message); }
+}
+
+function renderCard(receipt) {
+  const existing = document.getElementById('card-' + receipt.id);
+  const html = buildCardHTML(receipt);
+  if (existing) {
+    existing.outerHTML = html;
+  } else {
+    document.getElementById('grid').insertAdjacentHTML('beforeend', html);
+  }
+}
+
+function buildCardHTML(r) {
+  let body = '';
+  if (r.status === 'loading') {
+    body = '<p style="color:#a8a29e;font-size:13px;text-align:center;padding:8px 0">解析中…</p>';
+  } else if (r.status === 'error') {
+    body = `<div class="err-box">
+      <div class="err-title">⚠ 解析に失敗しました</div>
+      <button class="err-toggle" onclick="toggleErr('err-${r.id}')">詳細を見る ▼</button>
+      <pre class="err-pre" id="err-${r.id}">${r.error}</pre>
+    </div>`;
+  } else if (r.status === 'done' && r.data) {
+    const d = r.data;
+    const items = (d.items||[]).map(item => `
+      <div class="item-row">
+        <span class="item-name">${item.name||'—'}</span>
+        <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <span class="tax-tag">${item.tax_category||''}</span>
+          <span class="item-amt">¥${Number(item.amount||0).toLocaleString()}</span>
+        </span>
+      </div>`).join('');
+    body = `
+      <div class="data-row"><span class="l">店名</span><span class="v">${d.store_name||'—'}</span></div>
+      <div class="data-row"><span class="l">日付</span><span class="v">${d.date||'—'}</span></div>
+      <div class="data-row"><span class="l">インボイス</span><span class="v">${d.invoice_number||'—'}</span></div>
+      <hr>${items}<hr>
+      ${d.tax_8!=null?`<div class="data-row"><span class="l">消費税 8%</span><span class="v">¥${d.tax_8.toLocaleString()}</span></div>`:''}
+      ${d.tax_10!=null?`<div class="data-row"><span class="l">消費税 10%</span><span class="v">¥${d.tax_10.toLocaleString()}</span></div>`:''}
+      <div class="data-row"><span class="l">合計</span><span class="v bold">${d.total!=null?'¥'+d.total.toLocaleString():'—'}</span></div>
+      ${d.notes?`<p class="notes">${d.notes}</p>`:''}`;
+  }
+
+  const overlay = r.status==='loading'
+    ? '<div class="overlay"><div class="spinner"></div><div style="font-size:13px;color:#57534e;font-weight:600">Claudeが解析中…</div></div>' : '';
+  const tag = r.status==='done'
+    ? '<div class="status-tag" style="background:#16a34a">✓ 読取完了</div>'
+    : r.status==='error'
+    ? '<div class="status-tag" style="background:#dc2626">✗ エラー</div>' : '';
+
+  return `<div class="card" id="card-${r.id}">
+    <div class="card-img">
+      <img src="${r.preview}" alt=""/>
+      <button class="remove-btn" onclick="removeCard('${r.id}')">✕</button>
+      ${overlay}${tag}
+    </div>
+    <div class="card-body">${body}</div>
+  </div>`;
+}
+
+function toggleErr(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function removeCard(id) {
+  receipts = receipts.filter(r => String(r.id) !== String(id));
+  const el = document.getElementById('card-' + id);
+  if (el) el.remove();
+  updateStats();
+}
+
+function updateStats() {
+  const done = receipts.filter(r=>r.status==='done').length;
+  const err  = receipts.filter(r=>r.status==='error').length;
+  const load = receipts.filter(r=>r.status==='loading').length;
+  const stats = document.getElementById('stats');
+  const csvBtn = document.getElementById('csv-btn');
+  if (receipts.length === 0) { stats.style.display='none'; csvBtn.style.display='none'; return; }
+  stats.style.display = 'flex';
+  csvBtn.style.display = done > 0 ? 'block' : 'none';
+  csvBtn.textContent = `⬇ CSV出力 (${done}件)`;
+  stats.innerHTML =
+    `<span class="chip">合計 ${receipts.length}枚</span>` +
+    (load>0?`<span class="chip" style="color:#d97706;border-color:#d97706">⏳ 解析中 ${load}</span>`:'') +
+    (done>0?`<span class="chip" style="color:#16a34a;border-color:#16a34a">✓ 完了 ${done}</span>`:'') +
+    (err>0?`<span class="chip" style="color:#dc2626;border-color:#dc2626">✗ エラー ${err}</span>`:'');
+}
+
+function downloadCSV() {
+  const done = receipts.filter(r=>r.status==='done'&&r.data).map(r=>r.data);
+  if (!done.length) return;
+  const h = ['No','店名','インボイス番号','日付','商品名','金額','税区分','小計','消費税(8%)','消費税(10%)','合計金額','備考'];
+  const esc = v => { const s=String(v??''); return /[,"\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s; };
+  const rows = [];
+  done.forEach((r,i) => {
+    const items = r.items?.length ? r.items : [{name:'',amount:'',tax_category:''}];
+    items.forEach((item,j) => rows.push([
+      j===0?i+1:'', j===0?r.store_name||'':'', j===0?r.invoice_number||'':'',
+      j===0?r.date||'':'', item.name||'', item.amount??'', item.tax_category||'',
+      j===0?r.subtotal??'':'', j===0?r.tax_8??'':'', j===0?r.tax_10??'':'',
+      j===0?r.total??'':'', j===0?r.notes||'':''
+    ]));
+  });
+  const csv = '\uFEFF' + [h,...rows].map(r=>r.map(esc).join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  Object.assign(document.createElement('a'),{
+    href: URL.createObjectURL(blob),
+    download: `経費精算_${new Date().toISOString().slice(0,10)}.csv`
+  }).click();
+}
+</script>
+</body>
+</html>
